@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>语录平台对抗性夹具</title>
+  <style>
+    body { margin: 0; color: #172033; font: 16px/1.6 sans-serif; background: #eef5ff; }
+    .page { width: min(1080px, calc(100% - 40px)); margin: 40px auto; }
+    .card { padding: 28px; border-radius: 18px; background: white; }
+    .hidden-copy { display: none; }
+    .script-shell { padding: 18px; border: 1px solid #dce6f4; }
+    .script-body p { margin: 0 0 18px; }
+    .spacer { height: 5000px; }
+    .answer-card { padding: 24px; background: white; }
+    .recorder { display: flex; align-items: center; gap: 16px; padding: 12px 18px; }
+  </style>
+</head>
+<body>
+  <div class="hidden-copy" id="hidden-script">
+    轮次90:Hidden duplicate one.——1s
+    轮次91:Hidden duplicate two.——1s
+    轮次92:<span style="color: red">Hidden red phrase</span>.——1s
+    轮次93:Hidden duplicate four.——1s
+  </div>
+
+  <main class="page">
+    <button id="recording-help">查看录音规范</button>
+    <section class="card" id="task-card">
+      <h1>RTC-733</h1>
+      <div class="script-shell" id="script-shell">
+        <div class="script-body" id="real-script">
+          <p>轮次1:I often watch the clouds at <span style="color: rgb(36, 158, 99)">six</span> with my friend.——6s</p>
+          <p>轮次2:请纠正上一句话中的语法错误。——9s</p>
+          <p>轮次3:<span id="red-word" style="color: rgb(222, 65, 73)">I am agree</span> that six is a good time to watch the clouds. The clouds are pink near the sun. One long cloud looks like a boat.——7s</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="spacer" aria-hidden="true"></div>
+
+    <section class="answer-card" id="answer-card">
+      <h2>作答区</h2>
+      <div id="recorder-slot"></div>
+    </section>
+  </main>
+
+  <script>
+    window.mountRecorder = (id = 'real-recorder') => {
+      const recorder = document.createElement('div');
+      recorder.className = 'recorder';
+      recorder.id = id;
+      recorder.innerHTML = '<button type="button">开始录音</button><output aria-label="录音时长">00:00</output>';
+      document.querySelector('#recorder-slot').replaceChildren(recorder);
+      return recorder;
+    };
+  </script>
+</body>
+</html>
+
