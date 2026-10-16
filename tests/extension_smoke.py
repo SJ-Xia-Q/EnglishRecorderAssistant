@@ -24,18 +24,13 @@ def boxes_overlap(left: dict[str, float], right: dict[str, float]) -> bool:
     )
 
 
-def assert_attached_sidecar(
+def assert_stacked_below(
     assistant: dict[str, float], recorder: dict[str, float], tolerance: float = 14
 ) -> None:
-    vertical_overlap = min(
-        assistant["y"] + assistant["height"], recorder["y"] + recorder["height"]
-    ) - max(assistant["y"], recorder["y"])
-    horizontal_gap = min(
-        abs(assistant["x"] - (recorder["x"] + recorder["width"])),
-        abs(recorder["x"] - (assistant["x"] + assistant["width"])),
-    )
-    assert vertical_overlap > 0
-    assert horizontal_gap <= tolerance
+    vertical_gap = recorder["y"] - (assistant["y"] + assistant["height"])
+    assert 0 <= vertical_gap <= tolerance
+    assert abs(recorder["x"] - assistant["x"]) <= 1
+    assert abs(recorder["width"] - assistant["width"]) <= 1
 
 
 def show_overlay_from_extension(context, page) -> None:
@@ -143,6 +138,11 @@ def main() -> None:
         assert 0 <= host_box["x"] <= 1280 - host_box["width"]
         assert 0 <= host_box["y"] <= 720 - host_box["height"]
 
+        intro = host.locator("[data-testid='intro']")
+        assert intro.is_visible()
+        intro.get_by_role("button", name="知道了").click()
+        assert not intro.is_visible()
+
         page.evaluate("window.mountRecordedRecorder()")
         recorder = page.locator("#recorded-recorder")
         recorder.wait_for(state="visible")
@@ -154,7 +154,8 @@ def main() -> None:
         submit_box = page.locator("#submit-action").bounding_box()
         host_box = host.bounding_box()
         assert compact_recorder_box is not None and submit_box is not None and host_box is not None
-        assert_attached_sidecar(host_box, compact_recorder_box)
+        assert recorder.get_attribute("data-era-recorder-placement") == "below"
+        assert_stacked_below(host_box, compact_recorder_box)
         assert not boxes_overlap(compact_recorder_box, submit_box)
 
         host.get_by_role("button", name="展开录音区").click()
@@ -163,10 +164,10 @@ def main() -> None:
         )
         expanded_recorder_box = recorder.bounding_box()
         assert expanded_recorder_box is not None
+        assert_stacked_below(host.bounding_box(), expanded_recorder_box)
         assert (
-            expanded_recorder_box["width"] > compact_recorder_box["width"] + 80
-            or expanded_recorder_box["height"] > compact_recorder_box["height"] + 80
-        )
+            expanded_recorder_box["height"] > compact_recorder_box["height"] + 40
+        ), (compact_recorder_box, expanded_recorder_box, host.bounding_box())
         host.get_by_role("button", name="缩小录音区").click()
         page.wait_for_function(
             "document.querySelector('#recorded-recorder')?.dataset.eraRecorderSize === 'compact'"
@@ -194,7 +195,7 @@ def main() -> None:
         assert drag_box is not None and before_drag is not None and recorder_before_drag is not None
         page.mouse.move(drag_box["x"] + 90, drag_box["y"] + 24)
         page.mouse.down()
-        page.mouse.move(drag_box["x"] - 130, drag_box["y"] + 94, steps=8)
+        page.mouse.move(drag_box["x"] + 300, drag_box["y"] + 24, steps=8)
         page.mouse.up()
         page.wait_for_function(
             "document.querySelector('#english-recording-assistant-root')?.dataset.eraPositioned === 'true'"
@@ -202,8 +203,8 @@ def main() -> None:
         after_drag = host.bounding_box()
         recorder_after_drag = recorder.bounding_box()
         assert after_drag is not None and recorder_after_drag is not None
-        assert after_drag["x"] < before_drag["x"] - 150
-        assert after_drag["y"] > before_drag["y"] + 40
+        assert after_drag["x"] > before_drag["x"] + 150
+        assert abs(after_drag["y"] - before_drag["y"]) <= 1
         assert abs(
             (recorder_after_drag["x"] - recorder_before_drag["x"])
             - (after_drag["x"] - before_drag["x"])
@@ -233,11 +234,6 @@ def main() -> None:
         announcement = host.locator("[data-testid='announcement']")
         assert announcement.get_attribute("aria-live") == "polite"
         assert "读完本轮" in announcement.inner_text()
-
-        intro = host.locator("[data-testid='intro']")
-        assert intro.is_visible()
-        intro.get_by_role("button", name="知道了").click()
-        assert not intro.is_visible()
 
         host.get_by_role("button", name="开始静音").click()
         assert host.get_attribute("data-era-state") == "pause"

@@ -12,7 +12,7 @@
   let scan = dom.scanPage(document);
   let session = core.createSession(scan.turns);
   let onboardingVisible = true;
-  let defaultSide = 'right';
+  let defaultSide = 'left';
   let position = null;
   let compact = false;
   let recorderExpanded = false;
@@ -164,14 +164,14 @@
   chrome.storage.local.get(
     {
       onboardingSeen: false,
-      side: 'right',
+      side: 'left',
       position: null,
       compact: false,
       recorderExpanded: false,
     },
     (preferences) => {
       onboardingVisible = !preferences.onboardingSeen;
-      defaultSide = preferences.side === 'left' ? 'left' : 'right';
+      defaultSide = preferences.side === 'right' ? 'right' : 'left';
       position = Number.isFinite(preferences.position?.x)
         && Number.isFinite(preferences.position?.y)
         ? { x: preferences.position.x, y: preferences.position.y }

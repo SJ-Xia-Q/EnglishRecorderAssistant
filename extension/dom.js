@@ -3,7 +3,7 @@
 
   const SCRIPT_ELEMENTS = 'main, section, article, div';
   const RECORD_ACTION = /^(点击开始录音|点击开始录制|开始录音|开始录制|录音作答|开始作答|开始回答|暂停录音|继续录音|停止录音|停止录制|结束录音|结束录制|完成录音|完成录制|提交录音|重新录音|重录)$/;
-  const TIMER_TEXT = /(?:^|\s)\d{1,2}:\d{2}(?:\s|$)/;
+  const TIMER_TEXT = /(?:^|\s)\d{1,2}:\d{2}(?:\s*\/\s*\d{1,2}:\d{2})?(?=\s|$)/;
   const RECORDER_HEADING = /(用户录音|录音作答|音频录制)/;
   const PENDING_RECORDER_STATE = /(待录制|未录制|准备录音)/;
   const PENDING_RECORDER_PROMPT = /(点击|按下)?\s*(开始录音|开始录制)/;
@@ -270,49 +270,24 @@
     const viewport = documentRoot.defaultView;
     const viewportWidth = viewport.innerWidth;
     const viewportHeight = viewport.innerHeight;
-    const margin = viewportWidth <= 900 || viewportHeight <= 600 ? 12 : 22;
+    const low = viewportHeight <= 600;
+    const margin = viewportWidth <= 900 || low ? 12 : 22;
     const gap = 10;
-    const desiredWidth = expanded ? 560 : 360;
-    const desiredHeight = expanded ? 360 : 220;
-    const leftSpace = Math.max(0, anchorRect.left - gap - margin);
-    const rightSpace = Math.max(0, viewportWidth - margin - anchorRect.right - gap);
-    const canUseSide = Math.max(leftSpace, rightSpace) >= 200;
-    let placement;
-    let width;
-    let maxHeight;
-    let left;
-    let top;
+    const bottomActionReserve = low ? 84 : 0;
+    const desiredHeight = expanded ? 360 : 180;
+    const placement = 'below';
+    const width = Math.min(anchorRect.width, viewportWidth - (margin * 2));
+    const availableHeight = Math.max(
+      0,
+      viewportHeight - bottomActionReserve - margin - anchorRect.bottom - gap,
+    );
+    const maxHeight = Math.min(desiredHeight, availableHeight);
+    const left = clamp(anchorRect.left, margin, viewportWidth - margin - width);
+    const top = anchorRect.bottom + gap;
 
     recorderRoot.setAttribute(DOCK_SIZE_ATTRIBUTE, expanded ? 'expanded' : 'compact');
-
-    if (canUseSide) {
-      placement = leftSpace >= 200 ? 'left' : 'right';
-      const sideSpace = placement === 'left' ? leftSpace : rightSpace;
-      width = Math.min(desiredWidth, sideSpace);
-      maxHeight = Math.min(desiredHeight, viewportHeight - (margin * 2));
-      setDockProperty(recorderRoot, '--era-recorder-width', `${Math.round(width)}px`);
-      setDockProperty(recorderRoot, '--era-recorder-max-height', `${Math.round(maxHeight)}px`);
-      const measuredHeight = Math.min(recorderRoot.getBoundingClientRect().height, maxHeight);
-      left = placement === 'left'
-        ? anchorRect.left - gap - width
-        : anchorRect.right + gap;
-      top = clamp(anchorRect.top, margin, viewportHeight - margin - measuredHeight);
-    } else {
-      const aboveSpace = Math.max(0, anchorRect.top - gap - margin);
-      const belowSpace = Math.max(0, viewportHeight - margin - anchorRect.bottom - gap);
-      placement = belowSpace >= aboveSpace ? 'below' : 'above';
-      const verticalSpace = placement === 'below' ? belowSpace : aboveSpace;
-      width = Math.min(desiredWidth, viewportWidth - (margin * 2));
-      maxHeight = Math.max(72, Math.min(desiredHeight, verticalSpace));
-      setDockProperty(recorderRoot, '--era-recorder-width', `${Math.round(width)}px`);
-      setDockProperty(recorderRoot, '--era-recorder-max-height', `${Math.round(maxHeight)}px`);
-      const measuredHeight = Math.min(recorderRoot.getBoundingClientRect().height, maxHeight);
-      left = clamp(anchorRect.left, margin, viewportWidth - margin - width);
-      top = placement === 'below'
-        ? anchorRect.bottom + gap
-        : anchorRect.top - gap - measuredHeight;
-      top = clamp(top, margin, viewportHeight - margin - measuredHeight);
-    }
+    setDockProperty(recorderRoot, '--era-recorder-width', `${Math.round(width)}px`);
+    setDockProperty(recorderRoot, '--era-recorder-max-height', `${Math.round(maxHeight)}px`);
 
     recorderRoot.setAttribute(DOCK_PLACEMENT_ATTRIBUTE, placement);
     setDockProperty(recorderRoot, '--era-recorder-left', `${Math.round(left)}px`);

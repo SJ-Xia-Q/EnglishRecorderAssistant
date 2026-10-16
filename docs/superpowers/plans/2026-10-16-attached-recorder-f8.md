@@ -4,7 +4,7 @@
 
 **Goal:** Keep the original platform recorder visually attached to the draggable pace assistant without covering the submit area, and replace Space with a focus-independent F8 primary shortcut.
 
-**Architecture:** Preserve the platform recorder in its existing DOM parent and position it as a viewport sidecar using namespaced attributes and CSS custom properties. The overlay reports its resolved rectangle to the content script, which asks the DOM module to place the recorder beside it and to toggle compact/expanded sizing. The content script captures F8 globally and removes all Space interception.
+**Architecture:** Preserve the platform recorder in its existing DOM parent and visually stack it directly below the overlay using namespaced attributes and CSS custom properties. The overlay reports its resolved rectangle to the content script, which asks the DOM module to align the recorder below it at the same width and to toggle compact/expanded height. The content script captures F8 globally and removes all Space interception.
 
 **Tech Stack:** Chrome Manifest V3, vanilla JavaScript, Shadow DOM, Playwright Python tests, Node test runner.
 
@@ -23,7 +23,7 @@ Add `window.mountRecordedRecorder()` with two audio rows and add `#submit-action
 
 - [ ] **Step 2: Add failing observable assertions.**
 
-Assert that the recorder exposes compact sizing, sits within 12px of one side of the assistant, does not overlap `#submit-action`, follows the assistant by the same drag delta, grows after “展开录音区”, is undocked when the assistant closes, and is redocked after toolbar restoration.
+Assert that the recorder exposes compact sizing, sits within 14px below the assistant at the same width, does not overlap `#submit-action`, follows the assistant by the same drag delta, grows after “展开录音区”, is undocked when the assistant closes, and is redocked after toolbar restoration.
 
 - [ ] **Step 3: Run the focused extension tests and confirm RED.**
 
@@ -31,7 +31,7 @@ Run: `npm run test:extension`
 
 Expected: FAIL because recorder placement is still fixed to the viewport bottom and no recorder-size control exists.
 
-### Task 2: Implement the sidecar layout
+### Task 2: Implement the attached vertical layout
 
 **Files:**
 - Modify: `extension/dom.js`
@@ -41,7 +41,7 @@ Expected: FAIL because recorder placement is still fixed to the viewport bottom 
 
 - [ ] **Step 1: Add DOM docking APIs.**
 
-Keep `dockRecorder(recorderRoot)`, add `layoutRecorder(recorderRoot, anchorRect, expanded)` and `undockRecorder(recorderRoot)`. The layout function must set compact/expanded attributes, select left/right/above/below placement from actual viewport space, clamp the result, and publish pixel values through `--era-recorder-*` variables. The injected recorder rule must use those variables, internal scrolling, and no bottom/center transform.
+Keep `dockRecorder(recorderRoot)`, add `layoutRecorder(recorderRoot, anchorRect, expanded)` and `undockRecorder(recorderRoot)`. The layout function must set compact/expanded attributes, place the recorder below the assistant at the same width, clamp the combined stack to the viewport, reserve the low-viewport submit area, and publish pixel values through `--era-recorder-*` variables. The injected recorder rule must use those variables, internal scrolling, and no bottom/center transform.
 
 - [ ] **Step 2: Report overlay layout changes.**
 
@@ -55,9 +55,9 @@ Store `recorderExpanded` in `chrome.storage.local`. On every overlay layout call
 
 Run: `npm run test:extension`
 
-Expected: PASS with recorder sidecar, resize, drag, close and restore assertions.
+Expected: PASS with the vertically stacked recorder, resize, drag, close and restore assertions.
 
-- [ ] **Step 5: Commit the sidecar behavior.**
+- [ ] **Step 5: Commit the attached recorder behavior.**
 
 Commit: `feat: attach recorder to draggable assistant`
 
@@ -139,6 +139,6 @@ Commit: `docs: release attached recorder controls`
 ## Review Focus
 
 - Platform recorder remains the original node in its original parent.
-- Layout calculations survive large recorder contents, narrow/high-zoom viewports, SPA replacement, panel compacting and persisted positions.
+- The recorder remains directly below and the same width as the assistant; layout calculations survive large recorder contents, narrow/high-zoom viewports, SPA replacement, panel compacting and persisted positions.
 - Closing the helper cannot leave a fixed orphan recorder covering the page.
 - F8 works with page controls focused, cannot repeat-trigger, and Space is never intercepted by the helper.

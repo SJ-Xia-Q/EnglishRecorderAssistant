@@ -89,8 +89,8 @@
       recorder.id = id;
       recorder.innerHTML = [
         '<header><strong>用户录音</strong><span>已录制 2 段</span></header>',
-        '<div class="audio-row"><button type="button" aria-label="播放音频 1">▶</button><span class="waveform"></span><output>00:59</output></div>',
-        '<div class="audio-row"><button type="button" aria-label="播放音频 2">▶</button><span class="waveform"></span><output>00:17</output></div>',
+        '<div class="audio-row"><button type="button" aria-label="播放音频 1">▶</button><span class="waveform"></span><span>1x</span><output>0:00/0:59</output></div>',
+        '<div class="audio-row"><button type="button" aria-label="播放音频 2">▶</button><span class="waveform"></span><span>1x</span><output>0:00/0:17</output></div>',
         '<button type="button">重录</button>',
       ].join('');
       document.querySelector('#recorder-slot').replaceChildren(recorder);

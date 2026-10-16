@@ -27,9 +27,11 @@
     host.dataset.eraRecorderExpanded = 'false';
     const shadow = host.attachShadow({ mode: 'open' });
     let layout = {
-      defaultSide: 'right',
+      defaultSide: 'left',
       position: null,
       compact: false,
+      recorderFound: false,
+      recorderExpanded: false,
       visible: true,
     };
     let dragState = null;
@@ -40,6 +42,9 @@
     }
 
     function syncHostLayout() {
+      if (!host.isConnected) {
+        document.documentElement.append(host);
+      }
       if (!layout.visible) {
         setHostStyle('display', 'none');
         return;
@@ -79,11 +84,30 @@
 
       const rect = host.getBoundingClientRect();
       const margin = narrow || low ? 12 : 22;
+      const recorderGap = 10;
+      const bottomActionReserve = low ? 84 : 0;
+      const desiredRecorderHeight = layout.recorderExpanded ? 360 : 180;
+      const maximumRecorderHeight = Math.max(
+        0,
+        window.innerHeight
+          - (margin * 2)
+          - bottomActionReserve
+          - rect.height
+          - recorderGap,
+      );
+      const reservedRecorderHeight = layout.recorderFound
+        ? Math.min(desiredRecorderHeight, maximumRecorderHeight)
+        : 0;
+      const attachedHeight = layout.recorderFound
+        ? recorderGap + reservedRecorderHeight
+        : 0;
       const fallback = {
         x: layout.defaultSide === 'left'
           ? margin
           : window.innerWidth - rect.width - margin,
-        y: (window.innerHeight - rect.height) / 2,
+        y: narrow || low
+          ? margin
+          : (window.innerHeight - rect.height) / 2,
       };
       const requested = layout.position ?? fallback;
       const resolved = {
@@ -93,7 +117,14 @@
         ),
         y: Math.min(
           Math.max(margin, requested.y),
-          Math.max(margin, window.innerHeight - rect.height - margin),
+          Math.max(
+            margin,
+            window.innerHeight
+              - bottomActionReserve
+              - rect.height
+              - attachedHeight
+              - margin,
+          ),
         ),
       };
       setHostStyle('left', `${resolved.x}px`);
@@ -300,9 +331,23 @@
       host.dataset.eraCompact = String(compact);
       host.dataset.eraRecorderExpanded = String(recorderExpanded);
       if (!dragState) {
-        layout = { defaultSide, position, compact, visible };
+        layout = {
+          defaultSide,
+          position,
+          compact,
+          recorderFound,
+          recorderExpanded,
+          visible,
+        };
       } else {
-        layout = { ...layout, defaultSide, compact, visible };
+        layout = {
+          ...layout,
+          defaultSide,
+          compact,
+          recorderFound,
+          recorderExpanded,
+          visible,
+        };
       }
       host.dataset.eraVisible = String(visible);
       host.dataset.eraPositioned = String(Boolean(layout.position));

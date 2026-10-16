@@ -71,6 +71,15 @@ def boxes_overlap(left: dict[str, float], right: dict[str, float]) -> bool:
     )
 
 
+def assert_stacked_below(
+    assistant: dict[str, float], recorder: dict[str, float], tolerance: float = 14
+) -> None:
+    vertical_gap = recorder["y"] - (assistant["y"] + assistant["height"])
+    assert 0 <= vertical_gap <= tolerance
+    assert abs(recorder["x"] - assistant["x"]) <= 1
+    assert abs(recorder["width"] - assistant["width"]) <= 1
+
+
 def test_global_f8_and_space_passthrough(context) -> None:
     page, errors = open_case(context, "keyboard")
     host = host_for(page)
@@ -230,6 +239,16 @@ def test_spa_body_replacement_during_timer(context) -> None:
     page.wait_for_timeout(300)
     assert page.locator("#english-recording-assistant-root").count() == 1
     assert host.get_attribute("data-era-state") == "post-red"
+
+    page.evaluate(
+        "document.querySelector('#english-recording-assistant-root').remove()"
+    )
+    page.wait_for_function(
+        "document.querySelector('#english-recording-assistant-root')?.isConnected",
+        timeout=2_000,
+    )
+    assert page.locator("#english-recording-assistant-root").count() == 1
+    assert host.get_attribute("data-era-state") == "post-red"
     assert errors == []
     page.close()
 
@@ -344,19 +363,46 @@ def test_effective_zoom_viewports(context) -> None:
             page.evaluate("value => scrollTo(0, value)", scroll_y)
             assistant_box = assert_inside_viewport(page, "#english-recording-assistant-root")
             recorder_box = assert_inside_viewport(page, "#real-recorder")
+            submit_box = assert_inside_viewport(page, "#submit-action")
+            assert page.locator("#real-recorder").get_attribute(
+                "data-era-recorder-placement"
+            ) == "below"
+            assert_stacked_below(assistant_box, recorder_box)
             assert not boxes_overlap(assistant_box, recorder_box), (
                 f"assistant overlaps recorder at {label}, scroll={scroll_y}"
+            )
+            assert not boxes_overlap(assistant_box, submit_box), (
+                f"assistant overlaps submit at {label}, scroll={scroll_y}"
+            )
+            assert not boxes_overlap(recorder_box, submit_box), (
+                f"recorder overlaps submit at {label}, scroll={scroll_y}"
             )
 
     advance_to_red_turn(page)
     assistant_box = assert_inside_viewport(page, "#english-recording-assistant-root")
     recorder_box = assert_inside_viewport(page, "#real-recorder")
+    submit_box = assert_inside_viewport(page, "#submit-action")
     assert not boxes_overlap(assistant_box, recorder_box)
+    assert not boxes_overlap(assistant_box, submit_box)
+    assert not boxes_overlap(recorder_box, submit_box), (
+        "recorder overlaps submit after entering red timer",
+        assistant_box,
+        recorder_box,
+        submit_box,
+    )
     host.get_by_role("button", name="开始 5 秒").click()
     page.wait_for_timeout(80)
     assistant_box = assert_inside_viewport(page, "#english-recording-assistant-root")
     recorder_box = assert_inside_viewport(page, "#real-recorder")
+    submit_box = assert_inside_viewport(page, "#submit-action")
     assert not boxes_overlap(assistant_box, recorder_box)
+    assert not boxes_overlap(assistant_box, submit_box)
+    assert not boxes_overlap(recorder_box, submit_box), (
+        "recorder overlaps submit during red timer",
+        assistant_box,
+        recorder_box,
+        submit_box,
+    )
     page.screenshot(path=str(ARTIFACTS / "recording-assistant-zoom-200.png"))
 
     assert errors == []
