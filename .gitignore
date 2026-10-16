@@ -1,0 +1,20 @@
+# Local planning/execution scratch
+.superpowers/
+.codex-pdf-preview/
+
+# Dependencies and test artifacts
+node_modules/
+playwright-report/
+test-results/
+artifacts/
+
+# Local recordings (never commit voice data)
+recordings/
+*.wav
+*.webm
+*.ogg
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.log
