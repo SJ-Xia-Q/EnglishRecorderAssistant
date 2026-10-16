@@ -66,7 +66,7 @@
 
 **Interfaces:**
 - Exactly one host with id `english-recording-assistant-root` is attached to the document.
-- The host's closed Shadow DOM exposes user behavior through visible labels and `data-era-state` on the host.
+- The host's open Shadow DOM isolates styles while allowing accessibility inspection; behavior is also exposed through visible labels and `data-era-state` on the host.
 - `Space` invokes the primary action only during `reading`, outside editable controls, when `event.repeat === false`.
 
 - [ ] **Step 1: Write the failing extension test.** Load the unpacked extension in a persistent Chromium context, route the real host URL to the fixture, and assert the overlay, one-time instructions, ordinary-turn button, red-turn button, and live countdown behavior.
