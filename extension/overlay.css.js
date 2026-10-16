@@ -102,6 +102,7 @@
     }
 
     .icon-button:hover { background: white; }
+    .icon-button[hidden] { display: none; }
     .icon-button:focus-visible, .primary:focus-visible, .text-button:focus-visible {
       outline: 3px solid rgba(216, 74, 63, 0.28);
       outline-offset: 2px;

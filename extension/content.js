@@ -15,6 +15,7 @@
   let defaultSide = 'right';
   let position = null;
   let compact = false;
+  let recorderExpanded = false;
   let visible = true;
   let rescanTimer = null;
   let animationSignature = null;
@@ -52,6 +53,7 @@
       defaultSide,
       position,
       compact,
+      recorderExpanded,
       visible,
       now,
     });
@@ -72,6 +74,21 @@
     return session.phase === 'post-red' || session.phase === 'pause';
   }
 
+  function syncRecorderLayout(anchorRect = null) {
+    if (!scan.recorderRoot) {
+      return;
+    }
+    if (!visible) {
+      dom.undockRecorder(scan.recorderRoot);
+      return;
+    }
+    if (anchorRect) {
+      dom.layoutRecorder(scan.recorderRoot, anchorRect, recorderExpanded);
+      return;
+    }
+    dom.dockRecorder(scan.recorderRoot);
+  }
+
   function resetSession() {
     if (timerRunning()) {
       return;
@@ -82,7 +99,11 @@
 
   function applyScan(nextScan, forceReset = false) {
     if (nextScan.recorderRoot) {
-      dom.dockRecorder(nextScan.recorderRoot);
+      if (visible) {
+        dom.dockRecorder(nextScan.recorderRoot);
+      } else {
+        dom.undockRecorder(nextScan.recorderRoot);
+      }
     }
     const scriptTemporarilyMissing = nextScan.issues.some(
       (issue) => issue.code === 'script-not-found',
@@ -131,8 +152,14 @@
       chrome.storage.local.set({ compact });
       render();
     },
+    onToggleRecorderSize: () => {
+      recorderExpanded = !recorderExpanded;
+      chrome.storage.local.set({ recorderExpanded });
+      render();
+    },
     onClose: () => {
       visible = false;
+      syncRecorderLayout();
       render();
     },
     onPositionChange: (nextPosition, persist) => {
@@ -140,6 +167,9 @@
       if (persist) {
         chrome.storage.local.set({ position });
       }
+    },
+    onLayoutChange: (anchorRect) => {
+      syncRecorderLayout(anchorRect);
     },
   });
 
@@ -152,7 +182,13 @@
   }
 
   chrome.storage.local.get(
-    { onboardingSeen: false, side: 'right', position: null, compact: false },
+    {
+      onboardingSeen: false,
+      side: 'right',
+      position: null,
+      compact: false,
+      recorderExpanded: false,
+    },
     (preferences) => {
       onboardingVisible = !preferences.onboardingSeen;
       defaultSide = preferences.side === 'left' ? 'left' : 'right';
@@ -161,6 +197,7 @@
         ? { x: preferences.position.x, y: preferences.position.y }
         : null;
       compact = Boolean(preferences.compact);
+      recorderExpanded = Boolean(preferences.recorderExpanded);
       render();
     },
   );
@@ -170,6 +207,7 @@
       return;
     }
     visible = true;
+    syncRecorderLayout();
     render();
   });
 

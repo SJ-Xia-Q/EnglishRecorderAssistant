@@ -24,6 +24,7 @@
     host.dataset.eraState = 'loading';
     host.dataset.eraTurn = '0';
     host.dataset.eraCompact = 'false';
+    host.dataset.eraRecorderExpanded = 'false';
     const shadow = host.attachShadow({ mode: 'open' });
     let layout = {
       defaultSide: 'right',
@@ -32,6 +33,7 @@
       visible: true,
     };
     let dragState = null;
+    let layoutReportQueued = false;
 
     function setHostStyle(name, value) {
       host.style.setProperty(name, value, 'important');
@@ -99,6 +101,39 @@
       return resolved;
     }
 
+    function emitLayout() {
+      if (!layout.visible) {
+        return;
+      }
+      const rect = host.getBoundingClientRect();
+      callbacks.onLayoutChange?.({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+
+    function syncAndReportLayout() {
+      const resolved = syncHostLayout();
+      if (resolved) {
+        emitLayout();
+      }
+    }
+
+    function queueLayoutReport() {
+      if (layoutReportQueued) {
+        return;
+      }
+      layoutReportQueued = true;
+      queueMicrotask(() => {
+        layoutReportQueued = false;
+        syncAndReportLayout();
+      });
+    }
+
     const style = createElement('style');
     style.textContent = globalThis.RecordingAssistantOverlayStyles;
 
@@ -111,6 +146,7 @@
       <header class="header" data-drag-handle title="拖动标题栏移动">
         <span class="signal" aria-hidden="true"></span>
         <div class="brand"><strong>录制节奏</strong><span>PACE MONITOR</span></div>
+        <button class="icon-button" data-action="recorder-size" type="button" aria-label="展开录音区" title="展开录音区">▤</button>
         <button class="icon-button" data-action="compact" type="button" aria-label="折叠面板" title="折叠面板">−</button>
         <button class="icon-button" data-action="close" type="button" aria-label="关闭助手" title="关闭；点击扩展图标可恢复">×</button>
       </header>
@@ -145,7 +181,7 @@
     shadow.append(style, panel);
     document.documentElement.append(host);
     syncHostLayout();
-    window.addEventListener('resize', syncHostLayout, { passive: true });
+    window.addEventListener('resize', syncAndReportLayout, { passive: true });
 
     const refs = {
       panel,
@@ -161,6 +197,7 @@
       countdown: shadow.querySelector('[data-testid="countdown"]'),
       note: shadow.querySelector('[data-testid="note"]'),
       primary: shadow.querySelector('[data-action="primary"]'),
+      recorderSize: shadow.querySelector('[data-action="recorder-size"]'),
       compact: shadow.querySelector('[data-action="compact"]'),
       close: shadow.querySelector('[data-action="close"]'),
       rescan: shadow.querySelector('[data-action="rescan"]'),
@@ -176,6 +213,7 @@
       if (action === 'reset') callbacks.onReset();
       if (action === 'rescan') callbacks.onRescan();
       if (action === 'dismiss-intro') callbacks.onDismissIntro();
+      if (action === 'recorder-size') callbacks.onToggleRecorderSize();
       if (action === 'compact') callbacks.onToggleCompact();
       if (action === 'close') callbacks.onClose();
     });
@@ -217,6 +255,7 @@
         layout.position = resolved;
         host.dataset.eraPositioned = 'true';
         callbacks.onPositionChange({ ...resolved }, false);
+        emitLayout();
       }
     });
 
@@ -247,6 +286,7 @@
         defaultSide,
         position,
         compact,
+        recorderExpanded,
         visible,
         now,
       } = model;
@@ -258,6 +298,7 @@
       host.dataset.eraState = criticalIssue ? 'error' : state.phase;
       host.dataset.eraTurn = state.turnIndex >= 0 ? String(state.turnIndex + 1) : '0';
       host.dataset.eraCompact = String(compact);
+      host.dataset.eraRecorderExpanded = String(recorderExpanded);
       if (!dragState) {
         layout = { defaultSide, position, compact, visible };
       } else {
@@ -266,10 +307,15 @@
       host.dataset.eraVisible = String(visible);
       host.dataset.eraPositioned = String(Boolean(layout.position));
       syncHostLayout();
+      queueLayoutReport();
       refs.panel.dataset.state = criticalIssue ? 'error' : state.phase;
       refs.intro.hidden = !onboardingVisible;
       refs.compact.setAttribute('aria-label', compact ? '展开面板' : '折叠面板');
       refs.compact.textContent = compact ? '+' : '−';
+      refs.recorderSize.hidden = !recorderFound;
+      refs.recorderSize.setAttribute('aria-label', recorderExpanded ? '缩小录音区' : '展开录音区');
+      refs.recorderSize.setAttribute('title', recorderExpanded ? '缩小录音区' : '展开录音区');
+      refs.recorderSize.textContent = recorderExpanded ? '▥' : '▤';
       refs.rescan.disabled = timerRunning;
       refs.reset.disabled = timerRunning;
       refs.recorderState.dataset.found = String(recorderFound);

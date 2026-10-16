@@ -330,6 +330,7 @@ def test_effective_zoom_viewports(context) -> None:
         (819, 614, "125%"),
         (512, 384, "200%"),
     )
+    assert page.locator("#real-recorder").get_attribute("data-era-recorder-size") == "compact"
     for width, height, label in effective_viewports:
         page.set_viewport_size({"width": width, "height": height})
         for scroll_y in (0, 2500, 99999):

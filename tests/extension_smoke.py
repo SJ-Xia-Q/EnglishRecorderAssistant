@@ -15,6 +15,29 @@ ARTIFACTS = ROOT / "artifacts"
 TARGET_URL = "https://bytedance.feishuapp.com/app/test-recording-task"
 
 
+def boxes_overlap(left: dict[str, float], right: dict[str, float]) -> bool:
+    return not (
+        left["x"] + left["width"] <= right["x"]
+        or right["x"] + right["width"] <= left["x"]
+        or left["y"] + left["height"] <= right["y"]
+        or right["y"] + right["height"] <= left["y"]
+    )
+
+
+def assert_attached_sidecar(
+    assistant: dict[str, float], recorder: dict[str, float], tolerance: float = 14
+) -> None:
+    vertical_overlap = min(
+        assistant["y"] + assistant["height"], recorder["y"] + recorder["height"]
+    ) - max(assistant["y"], recorder["y"])
+    horizontal_gap = min(
+        abs(assistant["x"] - (recorder["x"] + recorder["width"])),
+        abs(recorder["x"] - (assistant["x"] + assistant["width"])),
+    )
+    assert vertical_overlap > 0
+    assert horizontal_gap <= tolerance
+
+
 def show_overlay_from_extension(context, page) -> None:
     workers = context.service_workers
     worker = workers[0] if workers else context.wait_for_event("serviceworker")
@@ -120,6 +143,35 @@ def main() -> None:
         assert 0 <= host_box["x"] <= 1280 - host_box["width"]
         assert 0 <= host_box["y"] <= 720 - host_box["height"]
 
+        page.evaluate("window.mountRecordedRecorder()")
+        recorder = page.locator("#recorded-recorder")
+        recorder.wait_for(state="visible")
+        page.wait_for_function(
+            "document.querySelector('#recorded-recorder')?.dataset.eraRecorderDocked === 'true'"
+        )
+        assert recorder.get_attribute("data-era-recorder-size") == "compact"
+        compact_recorder_box = recorder.bounding_box()
+        submit_box = page.locator("#submit-action").bounding_box()
+        host_box = host.bounding_box()
+        assert compact_recorder_box is not None and submit_box is not None and host_box is not None
+        assert_attached_sidecar(host_box, compact_recorder_box)
+        assert not boxes_overlap(compact_recorder_box, submit_box)
+
+        host.get_by_role("button", name="展开录音区").click()
+        page.wait_for_function(
+            "document.querySelector('#recorded-recorder')?.dataset.eraRecorderSize === 'expanded'"
+        )
+        expanded_recorder_box = recorder.bounding_box()
+        assert expanded_recorder_box is not None
+        assert (
+            expanded_recorder_box["width"] > compact_recorder_box["width"] + 80
+            or expanded_recorder_box["height"] > compact_recorder_box["height"] + 80
+        )
+        host.get_by_role("button", name="缩小录音区").click()
+        page.wait_for_function(
+            "document.querySelector('#recorded-recorder')?.dataset.eraRecorderSize === 'compact'"
+        )
+
         page.set_viewport_size({"width": 720, "height": 720})
         page.wait_for_timeout(50)
         narrow_box = host.bounding_box()
@@ -138,7 +190,8 @@ def main() -> None:
         assert drag_handle.count() == 1
         drag_box = drag_handle.bounding_box()
         before_drag = host.bounding_box()
-        assert drag_box is not None and before_drag is not None
+        recorder_before_drag = recorder.bounding_box()
+        assert drag_box is not None and before_drag is not None and recorder_before_drag is not None
         page.mouse.move(drag_box["x"] + 90, drag_box["y"] + 24)
         page.mouse.down()
         page.mouse.move(drag_box["x"] - 130, drag_box["y"] + 94, steps=8)
@@ -147,9 +200,18 @@ def main() -> None:
             "document.querySelector('#english-recording-assistant-root')?.dataset.eraPositioned === 'true'"
         )
         after_drag = host.bounding_box()
-        assert after_drag is not None
+        recorder_after_drag = recorder.bounding_box()
+        assert after_drag is not None and recorder_after_drag is not None
         assert after_drag["x"] < before_drag["x"] - 150
         assert after_drag["y"] > before_drag["y"] + 40
+        assert abs(
+            (recorder_after_drag["x"] - recorder_before_drag["x"])
+            - (after_drag["x"] - before_drag["x"])
+        ) <= 2
+        assert abs(
+            (recorder_after_drag["y"] - recorder_before_drag["y"])
+            - (after_drag["y"] - before_drag["y"])
+        ) <= 2
 
         page.set_viewport_size({"width": 360, "height": 420})
         page.wait_for_timeout(50)
@@ -207,19 +269,17 @@ def main() -> None:
         countdown_before_close = float(host.locator("[data-testid='countdown']").inner_text())
         host.get_by_role("button", name="关闭助手").click()
         assert host.is_hidden()
+        assert recorder.get_attribute("data-era-recorder-docked") is None
         page.wait_for_timeout(350)
         show_overlay_from_extension(context, page)
         host.wait_for(state="visible")
+        page.wait_for_function(
+            "document.querySelector('#recorded-recorder')?.dataset.eraRecorderDocked === 'true'"
+        )
         assert host.get_attribute("data-era-state") == "post-red"
         countdown_after_restore = float(host.locator("[data-testid='countdown']").inner_text())
         assert countdown_after_restore < countdown_before_close - 0.2
 
-        page.evaluate("window.mountRecorder()")
-        recorder = page.locator("#real-recorder")
-        recorder.wait_for(state="visible")
-        page.wait_for_function(
-            "document.querySelector('#real-recorder')?.dataset.eraRecorderDocked === 'true'"
-        )
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         recorder_box = recorder.bounding_box()
         host_box = host.bounding_box()

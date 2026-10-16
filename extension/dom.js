@@ -8,6 +8,8 @@
   const PENDING_RECORDER_STATE = /(待录制|未录制|准备录音)/;
   const PENDING_RECORDER_PROMPT = /(点击|按下)?\s*(开始录音|开始录制)/;
   const DOCK_ATTRIBUTE = 'data-era-recorder-docked';
+  const DOCK_SIZE_ATTRIBUTE = 'data-era-recorder-size';
+  const DOCK_PLACEMENT_ATTRIBUTE = 'data-era-recorder-placement';
   const DOCK_STYLE_ID = 'english-recording-assistant-recorder-style';
 
   function normalizeText(value) {
@@ -190,12 +192,18 @@
     style.textContent = `
       [${DOCK_ATTRIBUTE}="true"] {
         position: fixed !important;
-        inset: auto auto 18px 50% !important;
-        transform: translateX(-50%) !important;
+        inset: var(--era-recorder-top) auto auto var(--era-recorder-left) !important;
+        transform: none !important;
         z-index: 2147483000 !important;
-        width: min(720px, calc(100vw - 36px)) !important;
+        width: var(--era-recorder-width) !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        min-height: 0 !important;
+        max-height: var(--era-recorder-max-height) !important;
         box-sizing: border-box !important;
         margin: 0 !important;
+        overflow: auto !important;
+        overscroll-behavior: contain !important;
         border: 1px solid rgba(19, 33, 47, 0.12) !important;
         border-radius: 18px !important;
         background: rgba(255, 255, 255, 0.97) !important;
@@ -206,6 +214,28 @@
     (documentRoot.head || documentRoot.documentElement).append(style);
   }
 
+  function clearDockProperties(recorderRoot) {
+    for (const property of [
+      '--era-recorder-left',
+      '--era-recorder-top',
+      '--era-recorder-width',
+      '--era-recorder-max-height',
+    ]) {
+      recorderRoot.style.removeProperty(property);
+    }
+  }
+
+  function undockRecorder(recorderRoot) {
+    if (!recorderRoot) {
+      return null;
+    }
+    recorderRoot.removeAttribute(DOCK_ATTRIBUTE);
+    recorderRoot.removeAttribute(DOCK_SIZE_ATTRIBUTE);
+    recorderRoot.removeAttribute(DOCK_PLACEMENT_ATTRIBUTE);
+    clearDockProperties(recorderRoot);
+    return recorderRoot;
+  }
+
   function dockRecorder(recorderRoot) {
     if (!recorderRoot) {
       return null;
@@ -214,11 +244,87 @@
     ensureDockStyle(documentRoot);
     for (const previous of documentRoot.querySelectorAll(`[${DOCK_ATTRIBUTE}="true"]`)) {
       if (previous !== recorderRoot) {
-        previous.removeAttribute(DOCK_ATTRIBUTE);
+        undockRecorder(previous);
       }
     }
     recorderRoot.setAttribute(DOCK_ATTRIBUTE, 'true');
     return recorderRoot;
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
+  }
+
+  function setDockProperty(recorderRoot, property, value) {
+    if (recorderRoot.style.getPropertyValue(property) !== value) {
+      recorderRoot.style.setProperty(property, value);
+    }
+  }
+
+  function layoutRecorder(recorderRoot, anchorRect, expanded = false) {
+    if (!recorderRoot || !anchorRect) {
+      return null;
+    }
+    dockRecorder(recorderRoot);
+    const documentRoot = recorderRoot.ownerDocument;
+    const viewport = documentRoot.defaultView;
+    const viewportWidth = viewport.innerWidth;
+    const viewportHeight = viewport.innerHeight;
+    const margin = viewportWidth <= 900 || viewportHeight <= 600 ? 12 : 22;
+    const gap = 10;
+    const desiredWidth = expanded ? 560 : 360;
+    const desiredHeight = expanded ? 360 : 220;
+    const leftSpace = Math.max(0, anchorRect.left - gap - margin);
+    const rightSpace = Math.max(0, viewportWidth - margin - anchorRect.right - gap);
+    const canUseSide = Math.max(leftSpace, rightSpace) >= 200;
+    let placement;
+    let width;
+    let maxHeight;
+    let left;
+    let top;
+
+    recorderRoot.setAttribute(DOCK_SIZE_ATTRIBUTE, expanded ? 'expanded' : 'compact');
+
+    if (canUseSide) {
+      placement = leftSpace >= 200 ? 'left' : 'right';
+      const sideSpace = placement === 'left' ? leftSpace : rightSpace;
+      width = Math.min(desiredWidth, sideSpace);
+      maxHeight = Math.min(desiredHeight, viewportHeight - (margin * 2));
+      setDockProperty(recorderRoot, '--era-recorder-width', `${Math.round(width)}px`);
+      setDockProperty(recorderRoot, '--era-recorder-max-height', `${Math.round(maxHeight)}px`);
+      const measuredHeight = Math.min(recorderRoot.getBoundingClientRect().height, maxHeight);
+      left = placement === 'left'
+        ? anchorRect.left - gap - width
+        : anchorRect.right + gap;
+      top = clamp(anchorRect.top, margin, viewportHeight - margin - measuredHeight);
+    } else {
+      const aboveSpace = Math.max(0, anchorRect.top - gap - margin);
+      const belowSpace = Math.max(0, viewportHeight - margin - anchorRect.bottom - gap);
+      placement = belowSpace >= aboveSpace ? 'below' : 'above';
+      const verticalSpace = placement === 'below' ? belowSpace : aboveSpace;
+      width = Math.min(desiredWidth, viewportWidth - (margin * 2));
+      maxHeight = Math.max(72, Math.min(desiredHeight, verticalSpace));
+      setDockProperty(recorderRoot, '--era-recorder-width', `${Math.round(width)}px`);
+      setDockProperty(recorderRoot, '--era-recorder-max-height', `${Math.round(maxHeight)}px`);
+      const measuredHeight = Math.min(recorderRoot.getBoundingClientRect().height, maxHeight);
+      left = clamp(anchorRect.left, margin, viewportWidth - margin - width);
+      top = placement === 'below'
+        ? anchorRect.bottom + gap
+        : anchorRect.top - gap - measuredHeight;
+      top = clamp(top, margin, viewportHeight - margin - measuredHeight);
+    }
+
+    recorderRoot.setAttribute(DOCK_PLACEMENT_ATTRIBUTE, placement);
+    setDockProperty(recorderRoot, '--era-recorder-left', `${Math.round(left)}px`);
+    setDockProperty(recorderRoot, '--era-recorder-top', `${Math.round(top)}px`);
+    return {
+      placement,
+      size: expanded ? 'expanded' : 'compact',
+      left,
+      top,
+      width,
+      maxHeight,
+    };
   }
 
   function scanPage(documentRoot) {
@@ -262,6 +368,8 @@
   globalThis.RecordingAssistantDom = Object.freeze({
     scanPage,
     dockRecorder,
+    layoutRecorder,
+    undockRecorder,
     isVisible,
   });
 })();
