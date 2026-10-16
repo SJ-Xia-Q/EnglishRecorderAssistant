@@ -226,7 +226,8 @@ def main() -> None:
         assert abs(restored_drag["x"] - after_drag["x"]) <= 1
         assert abs(restored_drag["y"] - after_drag["y"]) <= 1
         assert "读完本轮后" in panel.inner_text()
-        assert "Space" in panel.inner_text()
+        assert "F8" in panel.inner_text()
+        assert "Space" not in panel.inner_text()
         assert host.locator("[data-testid='timer']").is_hidden()
         assert host.get_attribute("aria-live") is None
         announcement = host.locator("[data-testid='announcement']")
@@ -245,6 +246,9 @@ def main() -> None:
         )
 
         page.keyboard.press("Space")
+        assert host.get_attribute("data-era-state") == "reading"
+        page.locator("#recording-help").focus()
+        page.keyboard.press("F8")
         assert host.get_attribute("data-era-state") == "pause"
         page.wait_for_function(
             "document.querySelector('#english-recording-assistant-root')?.dataset.eraTurn === '3'"
@@ -262,7 +266,7 @@ def main() -> None:
         reset_button.evaluate("element => element.click()")
         rescan_button.evaluate("element => element.click()")
         assert host.get_attribute("data-era-state") == "post-red"
-        page.keyboard.press("Space")
+        page.keyboard.press("F8")
         assert host.get_attribute("data-era-state") == "post-red"
         assert "继续朗读" in panel.inner_text()
 

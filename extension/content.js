@@ -24,26 +24,6 @@
     return result.issues.some((issue) => issue.code !== 'recorder-not-found');
   }
 
-  function shortcutBlockedTarget(event) {
-    return event.composedPath().some((node) => (
-      node instanceof HTMLElement
-      && (
-        node.matches([
-          'input',
-          'textarea',
-          'select',
-          'button',
-          'a[href]',
-          'summary',
-          '[role="button"]',
-          '[contenteditable]',
-          '[tabindex]:not([tabindex="-1"])',
-        ].join(', '))
-        || node.isContentEditable
-      )
-    ));
-  }
-
   function render(now = performance.now()) {
     assistant.render({
       state: session,
@@ -211,16 +191,16 @@
     render();
   });
 
-  document.addEventListener('keydown', (event) => {
+  window.addEventListener('keydown', (event) => {
     if (
-      event.code !== 'Space'
+      event.code !== 'F8'
       || event.repeat
       || session.phase !== 'reading'
-      || shortcutBlockedTarget(event)
     ) {
       return;
     }
     event.preventDefault();
+    event.stopImmediatePropagation();
     primaryAction();
   }, true);
 

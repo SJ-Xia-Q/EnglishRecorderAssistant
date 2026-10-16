@@ -44,7 +44,7 @@ def advance_to_red_turn(page: Page) -> None:
     page.wait_for_function(
         "document.querySelector('#english-recording-assistant-root')?.dataset.eraTurn === '2'"
     )
-    page.keyboard.press("Space")
+    page.keyboard.press("F8")
     page.wait_for_function(
         "document.querySelector('#english-recording-assistant-root')?.dataset.eraTurn === '3'"
     )
@@ -71,7 +71,7 @@ def boxes_overlap(left: dict[str, float], right: dict[str, float]) -> bool:
     )
 
 
-def test_keyboard_guards(context) -> None:
+def test_global_f8_and_space_passthrough(context) -> None:
     page, errors = open_case(context, "keyboard")
     host = host_for(page)
 
@@ -103,20 +103,17 @@ def test_keyboard_guards(context) -> None:
             document.body.prepend(input, editor);
         }"""
     )
-    page.locator("#typing-input").focus()
+    typing_input = page.locator("#typing-input")
+    typing_input.focus()
     page.keyboard.press("Space")
     assert host.get_attribute("data-era-state") == "reading"
+    assert typing_input.input_value() == " "
 
-    page.locator("#typing-editor").focus()
-    page.keyboard.press("Space")
-    assert host.get_attribute("data-era-state") == "reading"
-
-    page.evaluate(
-        """() => document.dispatchEvent(new KeyboardEvent('keydown', {
-            key: ' ', code: 'Space', repeat: true, bubbles: true, composed: true,
-        }))"""
+    page.keyboard.press("F8")
+    assert host.get_attribute("data-era-state") == "pause"
+    page.wait_for_function(
+        "document.querySelector('#english-recording-assistant-root')?.dataset.eraTurn === '2'"
     )
-    assert host.get_attribute("data-era-state") == "reading"
 
     page.evaluate(
         """() => {
@@ -131,15 +128,25 @@ def test_keyboard_guards(context) -> None:
         "document.querySelector('#keyboard-recorder')?.dataset.eraRecorderDocked === 'true'"
     )
     page.locator("#keyboard-recorder button").focus()
+    page.keyboard.press("F8")
+    assert host.get_attribute("data-era-state") == "pause"
+    assert page.evaluate("window.platformRecorderKeyboardClicks ?? 0") == 0
+    page.wait_for_function(
+        "document.querySelector('#english-recording-assistant-root')?.dataset.eraTurn === '3'"
+    )
+
+    page.evaluate(
+        """() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'F8', code: 'F8', repeat: true, bubbles: true, composed: true,
+        }))"""
+    )
+    assert host.get_attribute("data-era-state") == "reading"
     page.keyboard.press("Space")
     assert host.get_attribute("data-era-state") == "reading"
-    assert page.evaluate("window.platformRecorderKeyboardClicks") == 1
-
-    page.evaluate("document.activeElement?.blur()")
-    page.keyboard.press("Space")
-    assert host.get_attribute("data-era-state") == "pause"
-    page.keyboard.press("Space")
-    assert host.get_attribute("data-era-state") == "pause"
+    page.keyboard.press("F8")
+    assert host.get_attribute("data-era-state") == "post-red"
+    page.keyboard.press("F8")
+    assert host.get_attribute("data-era-state") == "post-red"
     assert errors == []
     page.close()
 
@@ -164,7 +171,7 @@ def test_absolute_red_deadline(context) -> None:
     assert before >= 4.8
     assert after <= 3.0
     assert host.get_attribute("data-era-state") == "post-red"
-    page.keyboard.press("Space")
+    page.keyboard.press("F8")
     assert host.get_attribute("data-era-state") == "post-red"
     page.wait_for_function(
         "document.querySelector('#english-recording-assistant-root')?.dataset.eraState === 'pause'",
@@ -242,7 +249,7 @@ def test_invalid_pause_stops_instead_of_guessing(context) -> None:
     assert "无法识别剧本" in panel.inner_text()
     assert "缺少句末静音时长" in panel.inner_text()
     assert host.locator("[data-action='primary']").is_hidden()
-    page.keyboard.press("Space")
+    page.keyboard.press("F8")
     assert host.get_attribute("data-era-state") == "error"
 
     page.locator("#real-script p").first.evaluate(
@@ -383,7 +390,7 @@ def main() -> None:
         for initial_page in list(context.pages):
             initial_page.close()
 
-        test_keyboard_guards(context)
+        test_global_f8_and_space_passthrough(context)
         test_absolute_red_deadline(context)
         test_spa_body_replacement_during_timer(context)
         test_invalid_pause_stops_instead_of_guessing(context)

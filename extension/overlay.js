@@ -151,7 +151,7 @@
         <button class="icon-button" data-action="close" type="button" aria-label="关闭助手" title="关闭；点击扩展图标可恢复">×</button>
       </header>
       <aside class="intro" data-testid="intro">
-        <p>读完红词时点击主按钮或按 Space。倒计时期间继续朗读，归零后保持安静。</p>
+        <p>读完红词时点击主按钮或按 F8，无需先点击助手。倒计时期间继续朗读，归零后保持安静。</p>
         <button class="text-button" data-action="dismiss-intro" type="button">知道了</button>
       </aside>
       <div class="body">
@@ -171,7 +171,7 @@
         <button class="primary" data-action="primary" type="button" hidden></button>
       </div>
       <footer class="footer">
-        <span>Space = 当前主操作</span>
+        <span>F8 = 当前主操作（全局）</span>
         <span class="footer-actions">
           <button class="text-button" data-action="rescan" type="button">重新扫描</button>
           <button class="text-button" data-action="reset" type="button">重置</button>
@@ -361,7 +361,7 @@
           document.createTextNode(turn.hasRed ? '开始 5 秒' : `开始静音 ${turn.pauseSeconds}s`),
         );
         const key = createElement('kbd');
-        key.textContent = 'Space';
+        key.textContent = 'F8';
         refs.primary.append(key);
         return;
       }
