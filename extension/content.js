@@ -12,8 +12,10 @@
   let scan = dom.scanPage(document);
   let session = core.createSession(scan.turns);
   let onboardingVisible = true;
-  let side = 'right';
+  let defaultSide = 'right';
+  let position = null;
   let compact = false;
+  let visible = true;
   let rescanTimer = null;
   let animationSignature = null;
 
@@ -47,8 +49,10 @@
       issues: scan.issues,
       recorderFound: Boolean(scan.recorderRoot),
       onboardingVisible,
-      side,
+      defaultSide,
+      position,
       compact,
+      visible,
       now,
     });
   }
@@ -122,15 +126,20 @@
       chrome.storage.local.set({ onboardingSeen: true });
       render();
     },
-    onToggleSide: () => {
-      side = side === 'right' ? 'left' : 'right';
-      chrome.storage.local.set({ side });
-      render();
-    },
     onToggleCompact: () => {
       compact = !compact;
       chrome.storage.local.set({ compact });
       render();
+    },
+    onClose: () => {
+      visible = false;
+      render();
+    },
+    onPositionChange: (nextPosition, persist) => {
+      position = nextPosition;
+      if (persist) {
+        chrome.storage.local.set({ position });
+      }
     },
   });
 
@@ -143,14 +152,26 @@
   }
 
   chrome.storage.local.get(
-    { onboardingSeen: false, side: 'right', compact: false },
+    { onboardingSeen: false, side: 'right', position: null, compact: false },
     (preferences) => {
       onboardingVisible = !preferences.onboardingSeen;
-      side = preferences.side === 'left' ? 'left' : 'right';
+      defaultSide = preferences.side === 'left' ? 'left' : 'right';
+      position = Number.isFinite(preferences.position?.x)
+        && Number.isFinite(preferences.position?.y)
+        ? { x: preferences.position.x, y: preferences.position.y }
+        : null;
       compact = Boolean(preferences.compact);
       render();
     },
   );
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== 'era-show-overlay') {
+      return;
+    }
+    visible = true;
+    render();
+  });
 
   document.addEventListener('keydown', (event) => {
     if (

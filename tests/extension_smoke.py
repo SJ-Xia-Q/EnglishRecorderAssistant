@@ -15,6 +15,24 @@ ARTIFACTS = ROOT / "artifacts"
 TARGET_URL = "https://bytedance.feishuapp.com/app/test-recording-task"
 
 
+def show_overlay_from_extension(context, page) -> None:
+    workers = context.service_workers
+    worker = workers[0] if workers else context.wait_for_event("serviceworker")
+    shown = worker.evaluate(
+        """async (targetUrl) => {
+            const tabs = await chrome.tabs.query({});
+            const tab = tabs.find((candidate) => candidate.url === targetUrl)
+                ?? tabs.find((candidate) => candidate.active);
+            if (!tab?.id || !globalThis.RecordingAssistantBackground) {
+                return false;
+            }
+            return globalThis.RecordingAssistantBackground.showOverlayInTab(tab.id);
+        }""",
+        page.url,
+    )
+    assert shown is True
+
+
 def main() -> None:
     ARTIFACTS.mkdir(exist_ok=True)
     fixture = (
@@ -115,6 +133,36 @@ def main() -> None:
         assert restored_box is not None
         assert 0 <= restored_box["x"] <= 1280 - restored_box["width"]
         assert 0 <= restored_box["y"] <= 720 - restored_box["height"]
+
+        drag_handle = host.locator("[data-drag-handle]")
+        assert drag_handle.count() == 1
+        drag_box = drag_handle.bounding_box()
+        before_drag = host.bounding_box()
+        assert drag_box is not None and before_drag is not None
+        page.mouse.move(drag_box["x"] + 90, drag_box["y"] + 24)
+        page.mouse.down()
+        page.mouse.move(drag_box["x"] - 130, drag_box["y"] + 94, steps=8)
+        page.mouse.up()
+        page.wait_for_function(
+            "document.querySelector('#english-recording-assistant-root')?.dataset.eraPositioned === 'true'"
+        )
+        after_drag = host.bounding_box()
+        assert after_drag is not None
+        assert after_drag["x"] < before_drag["x"] - 150
+        assert after_drag["y"] > before_drag["y"] + 40
+
+        page.set_viewport_size({"width": 360, "height": 420})
+        page.wait_for_timeout(50)
+        clamped_box = host.bounding_box()
+        assert clamped_box is not None
+        assert 0 <= clamped_box["x"] <= 360 - clamped_box["width"]
+        assert 0 <= clamped_box["y"] <= 420 - clamped_box["height"]
+        page.set_viewport_size({"width": 1280, "height": 720})
+        page.wait_for_timeout(50)
+        restored_drag = host.bounding_box()
+        assert restored_drag is not None
+        assert abs(restored_drag["x"] - after_drag["x"]) <= 1
+        assert abs(restored_drag["y"] - after_drag["y"]) <= 1
         assert "读完本轮后" in panel.inner_text()
         assert "Space" in panel.inner_text()
         assert host.locator("[data-testid='timer']").is_hidden()
@@ -156,6 +204,16 @@ def main() -> None:
         assert host.get_attribute("data-era-state") == "post-red"
         assert "继续朗读" in panel.inner_text()
 
+        countdown_before_close = float(host.locator("[data-testid='countdown']").inner_text())
+        host.get_by_role("button", name="关闭助手").click()
+        assert host.is_hidden()
+        page.wait_for_timeout(350)
+        show_overlay_from_extension(context, page)
+        host.wait_for(state="visible")
+        assert host.get_attribute("data-era-state") == "post-red"
+        countdown_after_restore = float(host.locator("[data-testid='countdown']").inner_text())
+        assert countdown_after_restore < countdown_before_close - 0.2
+
         page.evaluate("window.mountRecorder()")
         recorder = page.locator("#real-recorder")
         recorder.wait_for(state="visible")
@@ -182,10 +240,9 @@ def main() -> None:
         assert host.get_attribute("data-era-state") == "reading"
         assert host.get_attribute("data-era-turn") == "1"
 
-        host.locator("[data-action='side']").click()
         host.locator("[data-action='compact']").click()
-        assert host.get_attribute("data-era-side") == "left"
         assert host.get_attribute("data-era-compact") == "true"
+        assert host.locator("[data-action='side']").count() == 0
 
         preferences_page = context.new_page()
         preferences_page.on("pageerror", lambda error: errors.append(f"pageerror: {error}"))
@@ -200,16 +257,21 @@ def main() -> None:
         preferences_page.wait_for_function(
             """() => {
                 const host = document.querySelector('#english-recording-assistant-root');
-                return host?.dataset.eraSide === 'left' && host?.dataset.eraCompact === 'true';
+                return host?.dataset.eraPositioned === 'true'
+                    && host?.dataset.eraCompact === 'true';
             }"""
         )
         assert preferences_host.locator("[data-testid='intro']").is_hidden()
+        preferences_box = preferences_host.bounding_box()
+        assert preferences_box is not None
+        assert abs(preferences_box["x"] - after_drag["x"]) <= 1
+        assert abs(preferences_box["y"] - after_drag["y"]) <= 1
         preferences_page.close()
         assert errors == []
 
         context.close()
 
-    print("Extension smoke: overlay, controls, timer lock, and fixed positioning passed")
+    print("Extension smoke: overlay, close/restore, drag, timer lock, and recorder docking passed")
 
 
 if __name__ == "__main__":

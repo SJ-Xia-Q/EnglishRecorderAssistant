@@ -10,7 +10,7 @@
 
 ## 决策
 
-实现一个仅匹配语录入口 `https://bytedance.aiforce.cloud/app/*` 与登录后任务域名 `https://bytedance.feishuapp.com/app/*` 的 Chrome/Edge Manifest V3 扩展。内容脚本自动读取剧本，在 Shadow DOM 中渲染固定计时面板，并通过一个专用 CSS 类固定原平台真实录音控件。
+实现一个仅匹配语录入口 `https://bytedance.aiforce.cloud/app/*` 与登录后任务域名 `https://bytedance.feishuapp.com/app/*` 的 Chrome/Edge Manifest V3 扩展。内容脚本自动读取剧本，在 Shadow DOM 中渲染可拖动的悬浮计时面板，并通过一个专用属性固定原平台真实录音控件。用户可隐藏助手，扩展工具栏图标通过轻量后台消息恢复当前标签页中的同一会话。
 
 红词轮只有一条路径：用户在读完红词时点击按钮或按空格，插件计时 5 秒，归零后自动执行本轮标注的静音。由于已确认红词后至少有 15 个词，不实现文本不足分析和提前静音。
 

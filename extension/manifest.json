@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "英语录制节奏助手",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "让语录平台的录音控件保持可见，并精确提示红词后 5 秒与句末静音。",
   "icons": {
     "16": "icons/icon16.png",
@@ -12,6 +12,18 @@
   "permissions": [
     "storage"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "显示英语录制节奏助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": [

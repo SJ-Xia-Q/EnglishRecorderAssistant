@@ -25,11 +25,6 @@
       color-scheme: light;
     }
 
-    :host([data-era-side="left"]) {
-      right: auto;
-      left: 22px;
-    }
-
     *, *::before, *::after { box-sizing: border-box; }
     button { font: inherit; }
 
@@ -74,7 +69,12 @@
       gap: 10px;
       padding: 17px 18px 12px;
       border-bottom: 1px solid var(--era-line);
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
     }
+
+    :host([data-era-dragging="true"]) .header { cursor: grabbing; }
 
     .signal {
       width: 10px;
@@ -293,7 +293,7 @@
     :host([data-era-compact="true"]) .timer-value { font-size: 29px; }
 
     @media (max-width: 900px) {
-      :host, :host([data-era-side="left"]) {
+      :host {
         top: 12px;
         right: 12px;
         left: auto;
@@ -303,7 +303,7 @@
     }
 
     @media (max-height: 600px) {
-      :host, :host([data-era-side="left"]) { width: min(240px, calc(100vw - 24px)); }
+      :host { width: min(240px, calc(100vw - 24px)); }
       .header { padding: 10px 12px 8px; }
       .brand span,
       .intro,

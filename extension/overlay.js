@@ -23,16 +23,25 @@
     const host = createElement('div', '', { id: ROOT_ID });
     host.dataset.eraState = 'loading';
     host.dataset.eraTurn = '0';
-    host.dataset.eraSide = 'right';
     host.dataset.eraCompact = 'false';
     const shadow = host.attachShadow({ mode: 'open' });
-    let layout = { side: 'right', compact: false };
+    let layout = {
+      defaultSide: 'right',
+      position: null,
+      compact: false,
+      visible: true,
+    };
+    let dragState = null;
 
     function setHostStyle(name, value) {
       host.style.setProperty(name, value, 'important');
     }
 
     function syncHostLayout() {
+      if (!layout.visible) {
+        setHostStyle('display', 'none');
+        return;
+      }
       const narrow = window.innerWidth <= 900;
       const low = window.innerHeight <= 600;
       const width = low
@@ -50,7 +59,11 @@
       setHostStyle('padding', '0');
       setHostStyle('border', '0');
       setHostStyle('width', width);
+      setHostStyle('min-width', '0');
+      setHostStyle('max-width', 'none');
       setHostStyle('height', 'auto');
+      setHostStyle('min-height', '0');
+      setHostStyle('max-height', 'none');
       setHostStyle('visibility', 'visible');
       setHostStyle('opacity', '1');
       setHostStyle('overflow', 'visible');
@@ -59,19 +72,31 @@
       setHostStyle('clip-path', 'none');
       setHostStyle('z-index', '2147483647');
       setHostStyle('bottom', 'auto');
+      setHostStyle('right', 'auto');
+      setHostStyle('transform', 'none');
 
-      if (narrow) {
-        setHostStyle('top', '12px');
-        setHostStyle('right', '12px');
-        setHostStyle('left', 'auto');
-        setHostStyle('transform', 'none');
-        return;
-      }
-
-      setHostStyle('top', '50%');
-      setHostStyle('right', layout.side === 'right' ? '22px' : 'auto');
-      setHostStyle('left', layout.side === 'left' ? '22px' : 'auto');
-      setHostStyle('transform', 'translateY(-50%)');
+      const rect = host.getBoundingClientRect();
+      const margin = narrow || low ? 12 : 22;
+      const fallback = {
+        x: layout.defaultSide === 'left'
+          ? margin
+          : window.innerWidth - rect.width - margin,
+        y: (window.innerHeight - rect.height) / 2,
+      };
+      const requested = layout.position ?? fallback;
+      const resolved = {
+        x: Math.min(
+          Math.max(margin, requested.x),
+          Math.max(margin, window.innerWidth - rect.width - margin),
+        ),
+        y: Math.min(
+          Math.max(margin, requested.y),
+          Math.max(margin, window.innerHeight - rect.height - margin),
+        ),
+      };
+      setHostStyle('left', `${resolved.x}px`);
+      setHostStyle('top', `${resolved.y}px`);
+      return resolved;
     }
 
     const style = createElement('style');
@@ -83,11 +108,11 @@
     });
     panel.innerHTML = `
       <p class="sr-only" data-testid="announcement" aria-live="polite"></p>
-      <header class="header">
+      <header class="header" data-drag-handle title="拖动标题栏移动">
         <span class="signal" aria-hidden="true"></span>
         <div class="brand"><strong>录制节奏</strong><span>PACE MONITOR</span></div>
-        <button class="icon-button" data-action="side" type="button" aria-label="切换到左侧" title="切换左右位置">⇄</button>
         <button class="icon-button" data-action="compact" type="button" aria-label="折叠面板" title="折叠面板">−</button>
+        <button class="icon-button" data-action="close" type="button" aria-label="关闭助手" title="关闭；点击扩展图标可恢复">×</button>
       </header>
       <aside class="intro" data-testid="intro">
         <p>读完红词时点击主按钮或按 Space。倒计时期间继续朗读，归零后保持安静。</p>
@@ -124,6 +149,7 @@
 
     const refs = {
       panel,
+      header: shadow.querySelector('[data-drag-handle]'),
       announcement: shadow.querySelector('[data-testid="announcement"]'),
       intro: shadow.querySelector('[data-testid="intro"]'),
       turnLabel: shadow.querySelector('[data-testid="turn-label"]'),
@@ -135,8 +161,8 @@
       countdown: shadow.querySelector('[data-testid="countdown"]'),
       note: shadow.querySelector('[data-testid="note"]'),
       primary: shadow.querySelector('[data-action="primary"]'),
-      side: shadow.querySelector('[data-action="side"]'),
       compact: shadow.querySelector('[data-action="compact"]'),
+      close: shadow.querySelector('[data-action="close"]'),
       rescan: shadow.querySelector('[data-action="rescan"]'),
       reset: shadow.querySelector('[data-action="reset"]'),
     };
@@ -150,9 +176,67 @@
       if (action === 'reset') callbacks.onReset();
       if (action === 'rescan') callbacks.onRescan();
       if (action === 'dismiss-intro') callbacks.onDismissIntro();
-      if (action === 'side') callbacks.onToggleSide();
       if (action === 'compact') callbacks.onToggleCompact();
+      if (action === 'close') callbacks.onClose();
     });
+
+    refs.header.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || event.target.closest('button')) {
+        return;
+      }
+      const rect = host.getBoundingClientRect();
+      dragState = {
+        pointerId: event.pointerId,
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        originX: rect.left,
+        originY: rect.top,
+        moved: false,
+      };
+      refs.header.setPointerCapture(event.pointerId);
+      host.dataset.eraDragging = 'true';
+      event.preventDefault();
+    });
+
+    refs.header.addEventListener('pointermove', (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      const deltaX = event.clientX - dragState.pointerX;
+      const deltaY = event.clientY - dragState.pointerY;
+      if (!dragState.moved && Math.hypot(deltaX, deltaY) < 4) {
+        return;
+      }
+      dragState.moved = true;
+      layout.position = {
+        x: dragState.originX + deltaX,
+        y: dragState.originY + deltaY,
+      };
+      const resolved = syncHostLayout();
+      if (resolved) {
+        layout.position = resolved;
+        host.dataset.eraPositioned = 'true';
+        callbacks.onPositionChange({ ...resolved }, false);
+      }
+    });
+
+    function finishDrag(event) {
+      if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      if (refs.header.hasPointerCapture(event.pointerId)) {
+        refs.header.releasePointerCapture(event.pointerId);
+      }
+      const moved = dragState.moved;
+      dragState = null;
+      host.dataset.eraDragging = 'false';
+      if (moved && layout.position) {
+        callbacks.onPositionChange({ ...layout.position }, true);
+      }
+    }
+
+    refs.header.addEventListener('pointerup', finishDrag);
+    refs.header.addEventListener('pointercancel', finishDrag);
 
     function render(model) {
       const {
@@ -160,8 +244,10 @@
         issues,
         recorderFound,
         onboardingVisible,
-        side,
+        defaultSide,
+        position,
         compact,
+        visible,
         now,
       } = model;
       const criticalIssue = issues.find((issue) => issue.code !== 'recorder-not-found');
@@ -171,13 +257,17 @@
 
       host.dataset.eraState = criticalIssue ? 'error' : state.phase;
       host.dataset.eraTurn = state.turnIndex >= 0 ? String(state.turnIndex + 1) : '0';
-      host.dataset.eraSide = side;
       host.dataset.eraCompact = String(compact);
-      layout = { side, compact };
+      if (!dragState) {
+        layout = { defaultSide, position, compact, visible };
+      } else {
+        layout = { ...layout, defaultSide, compact, visible };
+      }
+      host.dataset.eraVisible = String(visible);
+      host.dataset.eraPositioned = String(Boolean(layout.position));
       syncHostLayout();
       refs.panel.dataset.state = criticalIssue ? 'error' : state.phase;
       refs.intro.hidden = !onboardingVisible;
-      refs.side.setAttribute('aria-label', side === 'right' ? '切换到左侧' : '切换到右侧');
       refs.compact.setAttribute('aria-label', compact ? '展开面板' : '折叠面板');
       refs.compact.textContent = compact ? '+' : '−';
       refs.rescan.disabled = timerRunning;

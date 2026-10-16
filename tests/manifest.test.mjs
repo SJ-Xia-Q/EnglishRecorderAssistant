@@ -18,7 +18,13 @@ test('manifest uses the minimum site and storage access', async () => {
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.optional_permissions, undefined);
-  assert.equal(manifest.background, undefined);
+  assert.deepEqual(manifest.background, {
+    service_worker: 'background.js',
+  });
+  assert.deepEqual(manifest.action, {
+    default_title: '显示英语录制节奏助手',
+    default_icon: manifest.icons,
+  });
   assert.deepEqual(manifest.content_scripts, [{
     matches: [
       'https://bytedance.aiforce.cloud/app/*',
@@ -32,6 +38,7 @@ test('manifest uses the minimum site and storage access', async () => {
 test('every declared extension resource is bundled locally', async () => {
   const manifest = JSON.parse(await read('manifest.json'));
   const resources = [
+    manifest.background.service_worker,
     ...manifest.content_scripts.flatMap((entry) => entry.js),
     ...Object.values(manifest.icons),
   ];
@@ -44,7 +51,7 @@ test('every declared extension resource is bundled locally', async () => {
 
 test('runtime code has no recording, remote-code, or early-silence path', async () => {
   const runtime = (
-    await Promise.all(['core.js', 'dom.js', 'overlay.js', 'content.js'].map(read))
+    await Promise.all(['background.js', 'core.js', 'dom.js', 'overlay.js', 'content.js'].map(read))
   ).join('\n');
 
   for (const forbidden of [
