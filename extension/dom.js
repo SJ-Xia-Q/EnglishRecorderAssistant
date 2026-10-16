@@ -2,13 +2,23 @@
   'use strict';
 
   const SCRIPT_ELEMENTS = 'main, section, article, div';
-  const RECORD_ACTION = /^(开始录音|开始作答|开始回答|停止录音|结束录音|完成录音|重新录音|重录)$/;
+  const RECORD_ACTION = /^(开始录音|开始录制|录音作答|开始作答|开始回答|暂停录音|继续录音|停止录音|停止录制|结束录音|结束录制|完成录音|完成录制|提交录音|重新录音|重录)$/;
   const TIMER_TEXT = /(?:^|\s)\d{1,2}:\d{2}(?:\s|$)/;
   const DOCK_ATTRIBUTE = 'data-era-recorder-docked';
   const DOCK_STYLE_ID = 'english-recording-assistant-recorder-style';
 
   function normalizeText(value) {
     return String(value ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function recorderActionText(element) {
+    const candidates = [
+      element.innerText,
+      element.textContent,
+      element.getAttribute('aria-label'),
+      element.getAttribute('title'),
+    ].map(normalizeText);
+    return candidates.find((text) => RECORD_ACTION.test(text)) ?? '';
   }
 
   function isVisible(element) {
@@ -115,17 +125,19 @@
   function findRecorderRoot(documentRoot) {
     const controls = [...documentRoot.querySelectorAll('button, [role="button"]')]
       .filter(isVisible)
-      .filter((element) => RECORD_ACTION.test(normalizeText(element.innerText || element.textContent)));
+      .filter((element) => recorderActionText(element));
 
-    const candidates = controls.map((control) => {
-      const container = recorderContainerFor(control);
-      const text = normalizeText(container.innerText);
-      return {
-        container,
-        hasTimer: TIMER_TEXT.test(` ${text} `),
-        textLength: text.length,
-      };
-    });
+    const candidates = controls
+      .map((control) => {
+        const container = recorderContainerFor(control);
+        const text = normalizeText(container.innerText);
+        return {
+          container,
+          hasTimer: TIMER_TEXT.test(` ${text} `),
+          textLength: text.length,
+        };
+      })
+      .filter((candidate) => candidate.hasTimer);
 
     candidates.sort((left, right) => (
       Number(right.hasTimer) - Number(left.hasTimer)

@@ -1,26 +1,21 @@
+import os
 from pathlib import Path
-from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(ROOT / ".playwright-browsers"))
+
+from playwright.sync_api import sync_playwright
+
+
 FIXTURE = ROOT / "tests" / "fixtures" / "platform.html"
 CORE = ROOT / "extension" / "core.js"
 DOM = ROOT / "extension" / "dom.js"
-CHROME_CANDIDATES = (
-    Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-    Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-    Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-    Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
-)
 
 
 def main() -> None:
-    executable = next((path for path in CHROME_CANDIDATES if path.exists()), None)
-    if executable is None:
-        raise RuntimeError("Chrome or Edge executable was not found for browser tests.")
-
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, executable_path=str(executable))
+        browser = playwright.chromium.launch(channel="chromium", headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 720})
         page.goto(FIXTURE.as_uri())
         page.wait_for_load_state("networkidle")
@@ -64,6 +59,7 @@ def main() -> None:
                     sentinel: original.sentinel,
                     docked: original.dataset.eraRecorderDocked,
                     unrelatedDocked: document.querySelector('#recording-help').dataset.eraRecorderDocked ?? null,
+                    decoyDocked: document.querySelector('#recording-decoy').dataset.eraRecorderDocked ?? null,
                 };
             }"""
         )
@@ -73,6 +69,7 @@ def main() -> None:
             "sentinel": "same-node",
             "docked": "true",
             "unrelatedDocked": None,
+            "decoyDocked": None,
         }
 
         replaced = page.evaluate(
@@ -94,8 +91,28 @@ def main() -> None:
             "replacementDocked": "true",
         }
 
+        accessible_control = page.evaluate(
+            """() => {
+                const recorder = document.createElement('div');
+                recorder.id = 'accessible-recorder';
+                recorder.className = 'recorder';
+                recorder.innerHTML = [
+                    '<button type="button" aria-label="暂停录音"><span aria-hidden="true">■</span></button>',
+                    '<output aria-label="录音时长">00:07</output>',
+                ].join('');
+                document.querySelector('#recorder-slot').replaceChildren(recorder);
+                const result = globalThis.RecordingAssistantDom.scanPage(document);
+                globalThis.RecordingAssistantDom.dockRecorder(result.recorderRoot);
+                return {
+                    found: result.recorderRoot === recorder,
+                    docked: recorder.dataset.eraRecorderDocked ?? null,
+                };
+            }"""
+        )
+        assert accessible_control == {"found": True, "docked": "true"}
+
         browser.close()
-    print("DOM smoke: 3 adversarial scenarios passed")
+    print("DOM smoke: 4 adversarial scenarios passed")
 
 
 if __name__ == "__main__":

@@ -11,15 +11,36 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_pla
 
 EXTENSION = ROOT / "extension"
 FIXTURE = ROOT / "tests" / "fixtures" / "platform.html"
-TARGET_URL = "https://bytedance.aiforce.cloud/app/test-recording-task"
+ARTIFACTS = ROOT / "artifacts"
+TARGET_URL = "https://bytedance.feishuapp.com/app/test-recording-task"
 
 
 def main() -> None:
+    ARTIFACTS.mkdir(exist_ok=True)
     fixture = (
         FIXTURE.read_text(encoding="utf-8")
         .replace("——6s", "——0.12s")
         .replace("——9s", "——0.12s")
         .replace("——7s", "——0.12s")
+        .replace(
+            "</head>",
+            """
+            <style>
+              /* Simulate an aggressive host page trying to reposition injected divs. */
+              #english-recording-assistant-root {
+                display: none !important;
+                position: absolute !important;
+                top: -2000px !important;
+                right: auto !important;
+                left: 4000px !important;
+                width: 1px !important;
+                transform: none !important;
+                z-index: -1 !important;
+              }
+            </style>
+            </head>
+            """,
+        )
     )
     errors: list[str] = []
 
@@ -35,7 +56,7 @@ def main() -> None:
             ],
         )
         context.route(
-            "https://bytedance.aiforce.cloud/**",
+            "https://bytedance.feishuapp.com/**",
             lambda route: route.fulfill(status=200, content_type="text/html", body=fixture),
         )
         page = context.pages[0] if context.pages else context.new_page()
@@ -76,8 +97,31 @@ def main() -> None:
 
         panel = host.locator("[data-testid='panel']")
         assert panel.is_visible()
+        host_box = host.bounding_box()
+        assert host_box is not None
+        assert 0 <= host_box["x"] <= 1280 - host_box["width"]
+        assert 0 <= host_box["y"] <= 720 - host_box["height"]
+
+        page.set_viewport_size({"width": 720, "height": 720})
+        page.wait_for_timeout(50)
+        narrow_box = host.bounding_box()
+        assert narrow_box is not None
+        assert 0 <= narrow_box["x"] <= 720 - narrow_box["width"]
+        assert 0 <= narrow_box["y"] <= 720 - narrow_box["height"]
+
+        page.set_viewport_size({"width": 1280, "height": 720})
+        page.wait_for_timeout(50)
+        restored_box = host.bounding_box()
+        assert restored_box is not None
+        assert 0 <= restored_box["x"] <= 1280 - restored_box["width"]
+        assert 0 <= restored_box["y"] <= 720 - restored_box["height"]
         assert "读完本轮后" in panel.inner_text()
         assert "Space" in panel.inner_text()
+        assert host.locator("[data-testid='timer']").is_hidden()
+        assert host.get_attribute("aria-live") is None
+        announcement = host.locator("[data-testid='announcement']")
+        assert announcement.get_attribute("aria-live") == "polite"
+        assert "读完本轮" in announcement.inner_text()
 
         intro = host.locator("[data-testid='intro']")
         assert intro.is_visible()
@@ -101,6 +145,13 @@ def main() -> None:
         assert "I am agree" in panel.inner_text()
         red_button.click()
         assert host.get_attribute("data-era-state") == "post-red"
+        reset_button = host.locator("[data-action='reset']")
+        rescan_button = host.locator("[data-action='rescan']")
+        assert reset_button.is_disabled()
+        assert rescan_button.is_disabled()
+        reset_button.evaluate("element => element.click()")
+        rescan_button.evaluate("element => element.click()")
+        assert host.get_attribute("data-era-state") == "post-red"
         page.keyboard.press("Space")
         assert host.get_attribute("data-era-state") == "post-red"
         assert "继续朗读" in panel.inner_text()
@@ -118,12 +169,42 @@ def main() -> None:
         assert recorder_box["y"] + recorder_box["height"] <= 720
         assert host_box is not None and host_box["y"] >= 0
         assert host_box["y"] + host_box["height"] <= 720
+        page.screenshot(path=str(ARTIFACTS / "recording-assistant-red-timer.png"))
 
         page.wait_for_function(
             "document.querySelector('#english-recording-assistant-root')?.dataset.eraState === 'complete'",
             timeout=7_000,
         )
         assert "本题节奏完成" in panel.inner_text()
+        assert host.locator("[data-testid='timer']").is_hidden()
+        assert not reset_button.is_disabled()
+        reset_button.click()
+        assert host.get_attribute("data-era-state") == "reading"
+        assert host.get_attribute("data-era-turn") == "1"
+
+        host.locator("[data-action='side']").click()
+        host.locator("[data-action='compact']").click()
+        assert host.get_attribute("data-era-side") == "left"
+        assert host.get_attribute("data-era-compact") == "true"
+
+        preferences_page = context.new_page()
+        preferences_page.on("pageerror", lambda error: errors.append(f"pageerror: {error}"))
+        preferences_page.on(
+            "console",
+            lambda message: errors.append(f"console.{message.type}: {message.text}")
+            if message.type == "error" else None,
+        )
+        preferences_page.goto(f"{TARGET_URL}-preferences")
+        preferences_host = preferences_page.locator("#english-recording-assistant-root")
+        preferences_host.wait_for(state="attached", timeout=5_000)
+        preferences_page.wait_for_function(
+            """() => {
+                const host = document.querySelector('#english-recording-assistant-root');
+                return host?.dataset.eraSide === 'left' && host?.dataset.eraCompact === 'true';
+            }"""
+        )
+        assert preferences_host.locator("[data-testid='intro']").is_hidden()
+        preferences_page.close()
         assert errors == []
 
         context.close()

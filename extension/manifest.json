@@ -15,7 +15,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://bytedance.aiforce.cloud/app/*"
+        "https://bytedance.aiforce.cloud/app/*",
+        "https://bytedance.feishuapp.com/app/*"
       ],
       "js": [
         "core.js",

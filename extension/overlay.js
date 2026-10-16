@@ -25,8 +25,54 @@
     host.dataset.eraTurn = '0';
     host.dataset.eraSide = 'right';
     host.dataset.eraCompact = 'false';
-    host.setAttribute('aria-live', 'polite');
     const shadow = host.attachShadow({ mode: 'open' });
+    let layout = { side: 'right', compact: false };
+
+    function setHostStyle(name, value) {
+      host.style.setProperty(name, value, 'important');
+    }
+
+    function syncHostLayout() {
+      const narrow = window.innerWidth <= 900;
+      const low = window.innerHeight <= 600;
+      const width = low
+        ? 'min(240px, calc(100vw - 24px))'
+        : narrow
+          ? 'min(286px, calc(100vw - 24px))'
+          : layout.compact
+            ? '260px'
+            : 'min(312px, calc(100vw - 32px))';
+
+      setHostStyle('display', 'block');
+      setHostStyle('position', 'fixed');
+      setHostStyle('box-sizing', 'border-box');
+      setHostStyle('margin', '0');
+      setHostStyle('padding', '0');
+      setHostStyle('border', '0');
+      setHostStyle('width', width);
+      setHostStyle('height', 'auto');
+      setHostStyle('visibility', 'visible');
+      setHostStyle('opacity', '1');
+      setHostStyle('overflow', 'visible');
+      setHostStyle('pointer-events', 'auto');
+      setHostStyle('clip', 'auto');
+      setHostStyle('clip-path', 'none');
+      setHostStyle('z-index', '2147483647');
+      setHostStyle('bottom', 'auto');
+
+      if (narrow) {
+        setHostStyle('top', '12px');
+        setHostStyle('right', '12px');
+        setHostStyle('left', 'auto');
+        setHostStyle('transform', 'none');
+        return;
+      }
+
+      setHostStyle('top', '50%');
+      setHostStyle('right', layout.side === 'right' ? '22px' : 'auto');
+      setHostStyle('left', layout.side === 'left' ? '22px' : 'auto');
+      setHostStyle('transform', 'translateY(-50%)');
+    }
 
     const style = createElement('style');
     style.textContent = globalThis.RecordingAssistantOverlayStyles;
@@ -36,6 +82,7 @@
       'aria-label': '英语录制节奏助手',
     });
     panel.innerHTML = `
+      <p class="sr-only" data-testid="announcement" aria-live="polite"></p>
       <header class="header">
         <span class="signal" aria-hidden="true"></span>
         <div class="brand"><strong>录制节奏</strong><span>PACE MONITOR</span></div>
@@ -72,9 +119,12 @@
     `;
     shadow.append(style, panel);
     document.documentElement.append(host);
+    syncHostLayout();
+    window.addEventListener('resize', syncHostLayout, { passive: true });
 
     const refs = {
       panel,
+      announcement: shadow.querySelector('[data-testid="announcement"]'),
       intro: shadow.querySelector('[data-testid="intro"]'),
       turnLabel: shadow.querySelector('[data-testid="turn-label"]'),
       recorderState: shadow.querySelector('[data-testid="recorder-state"]'),
@@ -87,6 +137,8 @@
       primary: shadow.querySelector('[data-action="primary"]'),
       side: shadow.querySelector('[data-action="side"]'),
       compact: shadow.querySelector('[data-action="compact"]'),
+      rescan: shadow.querySelector('[data-action="rescan"]'),
+      reset: shadow.querySelector('[data-action="reset"]'),
     };
 
     shadow.addEventListener('click', (event) => {
@@ -114,16 +166,22 @@
       } = model;
       const criticalIssue = issues.find((issue) => issue.code !== 'recorder-not-found');
       const turn = state.turns[state.turnIndex] ?? null;
+      const timerRunning = !criticalIssue
+        && (state.phase === 'post-red' || state.phase === 'pause');
 
       host.dataset.eraState = criticalIssue ? 'error' : state.phase;
       host.dataset.eraTurn = state.turnIndex >= 0 ? String(state.turnIndex + 1) : '0';
       host.dataset.eraSide = side;
       host.dataset.eraCompact = String(compact);
+      layout = { side, compact };
+      syncHostLayout();
       refs.panel.dataset.state = criticalIssue ? 'error' : state.phase;
       refs.intro.hidden = !onboardingVisible;
       refs.side.setAttribute('aria-label', side === 'right' ? '切换到左侧' : '切换到右侧');
       refs.compact.setAttribute('aria-label', compact ? '展开面板' : '折叠面板');
       refs.compact.textContent = compact ? '+' : '−';
+      refs.rescan.disabled = timerRunning;
+      refs.reset.disabled = timerRunning;
       refs.recorderState.dataset.found = String(recorderFound);
       refs.recorderState.textContent = recorderFound ? '录音控件已悬浮' : '录音控件未出现';
       refs.turnLabel.textContent = turn
@@ -135,7 +193,14 @@
       refs.primary.hidden = true;
       refs.primary.replaceChildren();
 
+      function announce(message) {
+        if (refs.announcement.textContent !== message) {
+          refs.announcement.textContent = message;
+        }
+      }
+
       if (criticalIssue) {
+        announce(`无法识别剧本。${criticalIssue.message}`);
         refs.eyebrow.textContent = '需要检查';
         refs.title.textContent = '无法识别剧本';
         refs.note.textContent = criticalIssue.message;
@@ -143,6 +208,9 @@
       }
 
       if (state.phase === 'reading') {
+        announce(turn.hasRed
+          ? `${turn.label}，红词轮。读完红词后开始五秒。`
+          : `${turn.label}，普通轮。读完本轮后开始静音。`);
         refs.eyebrow.textContent = turn.hasRed ? '红词轮' : '普通轮';
         refs.title.textContent = turn.hasRed ? '读完红词后' : '读完本轮后';
         refs.note.textContent = turn.hasRed
@@ -163,6 +231,9 @@
       }
 
       if (state.phase === 'post-red' || state.phase === 'pause') {
+        announce(state.phase === 'post-red'
+          ? '红词后计时。继续朗读。'
+          : '句末静音。保持安静。');
         const remaining = globalThis.RecordingAssistantCore.remainingMs(state, now);
         const duration = state.phase === 'post-red' ? 5_000 : turn.pauseSeconds * 1_000;
         const progress = duration > 0 ? Math.max(0, Math.min(1, remaining / duration)) : 0;
@@ -177,6 +248,7 @@
         return;
       }
 
+      announce('全部轮次完成。请结束录音并回听。');
       refs.eyebrow.textContent = '全部轮次';
       refs.title.textContent = '本题节奏完成';
       refs.note.textContent = '请使用下方原平台按钮结束录音并回听';

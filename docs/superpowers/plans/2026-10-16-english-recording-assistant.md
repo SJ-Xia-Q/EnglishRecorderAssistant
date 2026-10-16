@@ -71,7 +71,7 @@
 
 - [ ] **Step 1: Write the failing extension test.** Load the unpacked extension in a persistent Chromium context, route the real host URL to the fixture, and assert the overlay, one-time instructions, ordinary-turn button, red-turn button, and live countdown behavior.
 - [ ] **Step 2: Verify RED.** Expected: overlay selector is absent.
-- [ ] **Step 3: Add the least-privilege manifest.** Match only `https://bytedance.aiforce.cloud/app/*`; request only `storage`; list `core.js`, `dom.js`, `overlay.css.js`, `overlay.js`, and `content.js` in dependency order.
+- [ ] **Step 3: Add the least-privilege manifest.** Match the entry and redirected task paths `https://bytedance.aiforce.cloud/app/*` and `https://bytedance.feishuapp.com/app/*`; request only `storage`; list `core.js`, `dom.js`, `overlay.css.js`, `overlay.js`, and `content.js` in dependency order.
 - [ ] **Step 4: Implement the overlay and controller.** Render one primary action while reading, no action during either timer, absolute-time updates, compact/side preferences, one-time onboarding, reset, and an explicit scan failure state.
 - [ ] **Step 5: Verify GREEN.** Run the extension test. Expected: all interaction assertions pass with zero page or extension errors.
 - [ ] **Step 6: Commit.** Commit `feat: add floating recording pace assistant`.

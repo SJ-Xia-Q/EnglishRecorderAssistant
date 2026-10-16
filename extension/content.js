@@ -15,15 +15,29 @@
   let side = 'right';
   let compact = false;
   let rescanTimer = null;
+  let animationSignature = null;
 
   function hasCriticalIssues(result) {
     return result.issues.some((issue) => issue.code !== 'recorder-not-found');
   }
 
-  function editableTarget(event) {
+  function shortcutBlockedTarget(event) {
     return event.composedPath().some((node) => (
       node instanceof HTMLElement
-      && (node.matches('input, textarea, select') || node.isContentEditable)
+      && (
+        node.matches([
+          'input',
+          'textarea',
+          'select',
+          'button',
+          'a[href]',
+          'summary',
+          '[role="button"]',
+          '[contenteditable]',
+          '[tabindex]:not([tabindex="-1"])',
+        ].join(', '))
+        || node.isContentEditable
+      )
     ));
   }
 
@@ -40,6 +54,9 @@
   }
 
   function primaryAction() {
+    if (hasCriticalIssues(scan)) {
+      return;
+    }
     const next = core.activatePrimary(session, performance.now());
     if (next !== session) {
       session = next;
@@ -47,7 +64,14 @@
     }
   }
 
+  function timerRunning() {
+    return session.phase === 'post-red' || session.phase === 'pause';
+  }
+
   function resetSession() {
+    if (timerRunning()) {
+      return;
+    }
     session = core.createSession(scan.turns);
     render();
   }
@@ -55,6 +79,24 @@
   function applyScan(nextScan, forceReset = false) {
     if (nextScan.recorderRoot) {
       dom.dockRecorder(nextScan.recorderRoot);
+    }
+    const scriptTemporarilyMissing = nextScan.issues.some(
+      (issue) => issue.code === 'script-not-found',
+    );
+    if (!forceReset && timerRunning() && scan.fingerprint && scriptTemporarilyMissing) {
+      const recorderIssue = nextScan.issues.find(
+        (issue) => issue.code === 'recorder-not-found',
+      );
+      scan = {
+        ...scan,
+        recorderRoot: nextScan.recorderRoot,
+        issues: [
+          ...scan.issues.filter((issue) => issue.code !== 'recorder-not-found'),
+          ...(recorderIssue ? [recorderIssue] : []),
+        ],
+      };
+      render();
+      return;
     }
     const taskChanged = nextScan.fingerprint && nextScan.fingerprint !== scan.fingerprint;
     scan = nextScan;
@@ -65,6 +107,9 @@
   }
 
   function rescan(forceReset = false) {
+    if (forceReset && timerRunning()) {
+      return;
+    }
     applyScan(dom.scanPage(document), forceReset);
   }
 
@@ -112,7 +157,7 @@
       event.code !== 'Space'
       || event.repeat
       || session.phase !== 'reading'
-      || editableTarget(event)
+      || shortcutBlockedTarget(event)
     ) {
       return;
     }
@@ -121,17 +166,40 @@
   }, true);
 
   const observer = new MutationObserver(() => {
-    clearTimeout(rescanTimer);
-    rescanTimer = setTimeout(() => rescan(false), 120);
+    if (rescanTimer !== null) {
+      return;
+    }
+    rescanTimer = setTimeout(() => {
+      rescanTimer = null;
+      rescan(false);
+    }, 180);
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
+  });
 
   function animationFrame(now) {
     const next = core.advanceSession(session, now);
     if (next !== session) {
       session = next;
     }
-    render(now);
+    const timerBucket = session.deadline === null
+      ? '-'
+      : Math.round(core.remainingMs(session, now) / 100);
+    const signature = [
+      session.phase,
+      session.turnIndex,
+      session.deadline ?? '-',
+      timerBucket,
+    ].join(':');
+    if (signature !== animationSignature) {
+      animationSignature = signature;
+      render(now);
+    }
     requestAnimationFrame(animationFrame);
   }
 
