@@ -2,8 +2,11 @@
   'use strict';
 
   const SCRIPT_ELEMENTS = 'main, section, article, div';
-  const RECORD_ACTION = /^(开始录音|开始录制|录音作答|开始作答|开始回答|暂停录音|继续录音|停止录音|停止录制|结束录音|结束录制|完成录音|完成录制|提交录音|重新录音|重录)$/;
+  const RECORD_ACTION = /^(点击开始录音|点击开始录制|开始录音|开始录制|录音作答|开始作答|开始回答|暂停录音|继续录音|停止录音|停止录制|结束录音|结束录制|完成录音|完成录制|提交录音|重新录音|重录)$/;
   const TIMER_TEXT = /(?:^|\s)\d{1,2}:\d{2}(?:\s|$)/;
+  const RECORDER_HEADING = /(用户录音|录音作答|音频录制)/;
+  const PENDING_RECORDER_STATE = /(待录制|未录制|准备录音)/;
+  const PENDING_RECORDER_PROMPT = /(点击|按下)?\s*(开始录音|开始录制)/;
   const DOCK_ATTRIBUTE = 'data-era-recorder-docked';
   const DOCK_STYLE_ID = 'english-recording-assistant-recorder-style';
 
@@ -143,7 +146,39 @@
       Number(right.hasTimer) - Number(left.hasTimer)
       || left.textLength - right.textLength
     ));
-    return candidates[0]?.container ?? null;
+    if (candidates[0]) {
+      return candidates[0].container;
+    }
+
+    const pendingCandidates = [...documentRoot.querySelectorAll('section, article, div')]
+      .filter(isVisible)
+      .map((element) => {
+        const text = normalizeText(element.innerText);
+        const hasVisibleControl = [...element.querySelectorAll('button, [role="button"]')]
+          .some(isVisible);
+        if (
+          text.length === 0
+          || text.length > 500
+          || !hasVisibleControl
+          || !RECORDER_HEADING.test(text)
+          || !PENDING_RECORDER_STATE.test(text)
+          || !PENDING_RECORDER_PROMPT.test(text)
+        ) {
+          return null;
+        }
+        return {
+          element,
+          textLength: text.length,
+          depth: element.querySelectorAll('*').length,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => (
+        left.textLength - right.textLength
+        || left.depth - right.depth
+      ));
+
+    return pendingCandidates[0]?.element ?? null;
   }
 
   function ensureDockStyle(documentRoot) {

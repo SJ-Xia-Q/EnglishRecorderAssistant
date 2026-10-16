@@ -111,8 +111,26 @@ def main() -> None:
         )
         assert accessible_control == {"found": True, "docked": "true"}
 
+        pending_control = page.evaluate(
+            """() => {
+                const recorder = window.mountPendingRecorder();
+                const result = globalThis.RecordingAssistantDom.scanPage(document);
+                globalThis.RecordingAssistantDom.dockRecorder(result.recorderRoot);
+                return {
+                    found: result.recorderRoot === recorder,
+                    docked: recorder.dataset.eraRecorderDocked ?? null,
+                    issues: result.issues,
+                };
+            }"""
+        )
+        assert pending_control == {
+            "found": True,
+            "docked": "true",
+            "issues": [],
+        }, pending_control
+
         browser.close()
-    print("DOM smoke: 4 adversarial scenarios passed")
+    print("DOM smoke: 5 adversarial scenarios passed")
 
 
 if __name__ == "__main__":

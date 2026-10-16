@@ -55,6 +55,20 @@
       document.querySelector('#recorder-slot').replaceChildren(recorder);
       return recorder;
     };
+
+    window.mountPendingRecorder = (id = 'pending-recorder') => {
+      const recorder = document.createElement('section');
+      recorder.className = 'pending-recorder';
+      recorder.id = id;
+      recorder.innerHTML = [
+        '<header><strong>用户录音</strong><span>待录制</span></header>',
+        '<button type="button" aria-label="点击开始录音"><span aria-hidden="true">●</span></button>',
+        '<p>点击开始录音</p>',
+        '<p>最短 3 秒，最长 120 分钟，录音期间自动保存</p>',
+      ].join('');
+      document.querySelector('#recorder-slot').replaceChildren(recorder);
+      return recorder;
+    };
   </script>
 </body>
 </html>
